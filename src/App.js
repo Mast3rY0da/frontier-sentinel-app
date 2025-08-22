@@ -288,7 +288,15 @@ const HazardManagement = () => {
 
         try {
             let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
-            const payload = { contents: chatHistory };
+            const payload = { 
+                contents: chatHistory,
+                safetySettings: [
+                    { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                    { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                    { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                    { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+                ]
+            };
             const apiKey = "";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
             
@@ -308,11 +316,14 @@ const HazardManagement = () => {
                 const text = result.candidates[0].content.parts[0].text;
                 setAnalysisResult(text);
             } else {
+                if (result.promptFeedback && result.promptFeedback.blockReason) {
+                    throw new Error(`Request was blocked: ${result.promptFeedback.blockReason}`);
+                }
                 throw new Error("Invalid response structure from API.");
             }
         } catch (error) {
             console.error("Gemini API error:", error);
-            setAnalysisError("Failed to get analysis. Please try again.");
+            setAnalysisError(`Failed to get analysis. Reason: ${error.message}`);
         } finally {
             setIsAnalyzing(false);
         }
