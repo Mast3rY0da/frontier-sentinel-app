@@ -23,7 +23,8 @@ import {
   Eye,
   ArrowLeft,
   Download,
-  CheckCircle
+  CheckCircle,
+  Sparkles
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
@@ -226,12 +227,15 @@ const HazardManagement = () => {
     const { userData } = useAuth();
     const [hazards, setHazards] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [view, setView] = useState('list'); // 'list', 'form', 'details'
+    const [view, setView] = useState('list');
     const [selectedHazard, setSelectedHazard] = useState(null);
     const [newHazard, setNewHazard] = useState({
       location: '', type: 'Unsafe Condition', severity: 'Medium', description: '', status: 'Open',
     });
-  
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [analysisResult, setAnalysisResult] = useState('');
+    const [analysisError, setAnalysisError] = useState('');
+
     const fetchHazards = async () => {
       setLoading(true);
       const hazardSnapshot = await getDocs(collection(db, 'hazardIds'));
@@ -263,7 +267,55 @@ const HazardManagement = () => {
   
     const handleViewDetails = (hazard) => {
       setSelectedHazard(hazard);
+      setAnalysisResult('');
+      setAnalysisError('');
       setView('details');
+    };
+
+    const handleAnalyzeHazard = async () => {
+        if (!selectedHazard) return;
+        setIsAnalyzing(true);
+        setAnalysisResult('');
+        setAnalysisError('');
+        
+        const prompt = `You are an expert safety advisor for an oil and gas well servicing company in Alberta, Canada. A new hazard has been reported with the following description: "${selectedHazard.description}" at location "${selectedHazard.location}" with a severity of "${selectedHazard.severity}".
+
+        Based on the principles of a Zero Incident Protocol (ZIP) and Energy Safety Canada guidelines, provide a brief, actionable analysis in three distinct sections. Use markdown for formatting.
+        
+        1.  **Potential Root Causes:** (List 2-3 likely underlying reasons this hazard occurred).
+        2.  **Suggested Immediate Controls:** (List 2-3 practical actions to take immediately to secure the area and prevent injury).
+        3.  **Recommended Long-Term Corrective Actions:** (List 2-3 systemic changes or actions to prevent recurrence, such as training updates, procedure changes, or equipment reviews).`;
+
+        try {
+            let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+            const payload = { contents: chatHistory };
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error(`API call failed with status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            
+            if (result.candidates && result.candidates.length > 0) {
+                const text = result.candidates[0].content.parts[0].text;
+                setAnalysisResult(text);
+            } else {
+                throw new Error("Invalid response structure from API.");
+            }
+        } catch (error) {
+            console.error("Gemini API error:", error);
+            setAnalysisError("Failed to get analysis. Please try again.");
+        } finally {
+            setIsAnalyzing(false);
+        }
     };
   
     if (view === 'form') {
@@ -336,6 +388,17 @@ const HazardManagement = () => {
               <h4 className="text-lg font-bold text-slate-700">Full Description</h4>
               <p className="mt-2 text-slate-600 whitespace-pre-wrap">{selectedHazard.description}</p>
           </div>
+          <div className="mt-6 border-t border-slate-200 pt-6">
+            <div className="flex justify-between items-center">
+                <h4 className="text-lg font-bold text-slate-700">AI Safety Analysis</h4>
+                <button onClick={handleAnalyzeHazard} disabled={isAnalyzing} className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors duration-300 disabled:bg-indigo-400">
+                    {isAnalyzing ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <Sparkles className="mr-2 h-5 w-5" />}
+                    {isAnalyzing ? 'Analyzing...' : 'Analyze Hazard'}
+                </button>
+            </div>
+            {analysisResult && <div className="mt-4 p-4 bg-slate-50 rounded-lg text-slate-700 whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: analysisResult.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br />') }} />}
+            {analysisError && <p className="mt-4 text-sm text-red-600">{analysisError}</p>}
+          </div>
         </div>
       );
     }
@@ -388,28 +451,26 @@ const PolicyManagement = () => {
     const [acknowledgments, setAcknowledgments] = useState([]);
     const [loading, setLoading] = useState(true);
   
-    const policyId = "zip-policy-v1"; // A unique ID for this policy document
+    const policyId = "zip-policy-v1";
   
     useEffect(() => {
       const fetchPolicyData = async () => {
         setLoading(true);
-        // In a real app, you'd fetch the policy content from Firestore/Storage
         const policyContent = {
           title: "ZIP - Zero Incident Protocol",
           version: "1.0",
           effectiveDate: "January 1, 2025",
-          summary: "This Zero Incident Protocol (ZIP) articulates Frontier Well Servicing's definitive commitment to fostering a safe, healthy, and incident-free work environment. It establishes a comprehensive safety framework that guides our organizational culture and operational practices toward the proactive prevention of all incidents, injuries, and unsafe behaviors."
+          summary: "This Zero Incident Protocol (ZIP) articulates Frontier Well Servicing's definitive commitment to fostering a safe, healthy, and incident-free work environment..."
         };
         setPolicy(policyContent);
   
-        // Fetch acknowledgments for this policy
         const ackQuery = query(collection(db, "policyAcknowledgments"), where("policyId", "==", policyId));
         const ackSnapshot = await getDocs(ackQuery);
         setAcknowledgments(ackSnapshot.docs.map(doc => doc.data()));
         setLoading(false);
       };
       fetchPolicyData();
-    }, [user]); // Re-fetch if user changes
+    }, [user]);
   
     const handleAcknowledge = async () => {
       if (!user) return;
@@ -421,7 +482,6 @@ const PolicyManagement = () => {
           email: user.email,
           acknowledgedAt: serverTimestamp()
         });
-        // Refresh acknowledgments
         const ackSnapshot = await getDocs(query(collection(db, "policyAcknowledgments"), where("policyId", "==", policyId)));
         setAcknowledgments(ackSnapshot.docs.map(doc => doc.data()));
       } catch (error) {
@@ -450,10 +510,7 @@ const PolicyManagement = () => {
                 <p className="font-semibold">You have acknowledged this policy.</p>
               </div>
             ) : (
-              <button
-                onClick={handleAcknowledge}
-                className="w-full bg-teal-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-teal-700 transition-colors"
-              >
+              <button onClick={handleAcknowledge} className="w-full bg-teal-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-teal-700 transition-colors">
                 Acknowledge and Confirm
               </button>
             )}
@@ -480,7 +537,6 @@ const ReportsView = () => {
   
     const generateReport = async () => {
       setGenerating(true);
-      // Fetch all necessary data for the audit report
       const [hazardSnapshot, ackSnapshot, usersSnapshot] = await Promise.all([
         getDocs(collection(db, 'hazardIds')),
         getDocs(collection(db, 'policyAcknowledgments')),
@@ -491,7 +547,6 @@ const ReportsView = () => {
       const acknowledgments = ackSnapshot.docs.map(doc => doc.data());
       const users = usersSnapshot.docs.map(doc => doc.data());
   
-      // Structure the data according to COR elements
       const structuredReport = {
         elementA: {
           title: "Management, Leadership, and Organizational Commitment",
@@ -504,7 +559,6 @@ const ReportsView = () => {
           openHazards: hazards.filter(h => h.status === 'Open').length,
           criticalHazards: hazards.filter(h => h.severity === 'Critical').length,
         },
-        // ... add more elements as other features are built
       };
       setReportData(structuredReport);
       setGenerating(false);
@@ -514,11 +568,7 @@ const ReportsView = () => {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h2 className="text-3xl font-bold text-slate-800">Reports & Audits</h2>
-          <button
-            onClick={generateReport}
-            disabled={generating}
-            className="inline-flex items-center justify-center px-5 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-300 disabled:bg-blue-400"
-          >
+          <button onClick={generateReport} disabled={generating} className="inline-flex items-center justify-center px-5 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-300 disabled:bg-blue-400">
             {generating ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <Download className="mr-2 h-5 w-5" />}
             {generating ? 'Generating...' : 'Generate Audit Report'}
           </button>
@@ -528,13 +578,11 @@ const ReportsView = () => {
           <div className="bg-white p-8 rounded-xl shadow-lg">
             <h3 className="text-2xl font-bold text-slate-800 mb-4">COR Audit Summary</h3>
             <div className="space-y-4">
-              {/* Element A */}
               <div>
                 <h4 className="font-bold text-slate-700">{reportData.elementA.title}</h4>
                 <p className="text-sm text-slate-600">Policy Status: {reportData.elementA.policyStatus}</p>
                 <p className="text-sm text-slate-600">Acknowledgment Rate: {reportData.elementA.acknowledgmentRate}</p>
               </div>
-              {/* Element B */}
               <div>
                 <h4 className="font-bold text-slate-700">{reportData.elementB.title}</h4>
                 <p className="text-sm text-slate-600">Total Hazards Reported: {reportData.elementB.totalHazards}</p>
