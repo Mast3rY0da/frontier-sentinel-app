@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, Link } from 'react-router-dom';
 import { initializeApp } from "firebase/app";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut as firebaseSignOut, createUserWithEmailAndPassword } from "firebase/auth";
-import { getFirestore, collection, getDocs, addDoc, doc, getDoc } from "firebase/firestore";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
+import { getFirestore, collection, getDocs, doc, getDoc } from "firebase/firestore";
 import {
   User,
   Shield,
@@ -11,13 +11,9 @@ import {
   FileText,
   Users,
   Calendar,
-  Camera,
-  MapPin,
   Plus,
-  Bell,
   Settings,
   LogOut,
-  Eye,
   Clock,
   TrendingUp,
   Activity,
