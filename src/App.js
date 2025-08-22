@@ -20,7 +20,8 @@ import {
   Loader2,
   MapPin,
   Camera,
-  Eye
+  Eye,
+  ArrowLeft
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
@@ -218,18 +219,15 @@ const ActivityCard = ({ title, data, renderItem }) => (
   </div>
 );
 
-// --- NEW FUNCTIONAL HAZARD MANAGEMENT COMPONENT ---
+// --- UPDATED HAZARD MANAGEMENT COMPONENT ---
 const HazardManagement = () => {
   const { userData } = useAuth();
   const [hazards, setHazards] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showReportForm, setShowReportForm] = useState(false);
+  const [view, setView] = useState('list'); // 'list', 'form', 'details'
+  const [selectedHazard, setSelectedHazard] = useState(null);
   const [newHazard, setNewHazard] = useState({
-    location: '',
-    type: 'Unsafe Condition',
-    severity: 'Medium',
-    description: '',
-    status: 'Open',
+    location: '', type: 'Unsafe Condition', severity: 'Medium', description: '', status: 'Open',
   });
 
   const fetchHazards = async () => {
@@ -245,58 +243,44 @@ const HazardManagement = () => {
 
   const handleSubmitHazard = async (e) => {
     e.preventDefault();
-    if (!newHazard.description || !newHazard.location) {
-      alert("Please fill out all required fields.");
-      return;
-    }
-    
+    if (!newHazard.description || !newHazard.location) return;
     try {
       await addDoc(collection(db, "hazardIds"), {
         ...newHazard,
         reportedBy: userData?.displayName || 'Unknown User',
-        date: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
+        date: new Date().toISOString().split('T')[0],
         timestamp: serverTimestamp()
       });
-      setShowReportForm(false);
+      setView('list');
       setNewHazard({ location: '', type: 'Unsafe Condition', severity: 'Medium', description: '', status: 'Open' });
-      fetchHazards(); // Refresh the list after adding
+      fetchHazards();
     } catch (error) {
       console.error("Error adding document: ", error);
-      alert("Failed to submit hazard report.");
     }
   };
 
-  if (showReportForm) {
+  const handleViewDetails = (hazard) => {
+    setSelectedHazard(hazard);
+    setView('details');
+  };
+
+  if (view === 'form') {
     return (
       <div className="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-lg">
         <h3 className="text-2xl font-bold text-slate-800 mb-6">Report New Hazard</h3>
         <form onSubmit={handleSubmitHazard} className="space-y-6">
+          {/* Form fields... same as before */}
           <div>
             <label className="block text-sm font-medium text-slate-700">Location</label>
             <div className="mt-1 relative">
-              <input
-                type="text"
-                value={newHazard.location}
-                onChange={(e) => setNewHazard({ ...newHazard, location: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-                placeholder="e.g., Bay 2, Wellsite A-15"
-                required
-              />
+              <input type="text" value={newHazard.location} onChange={(e) => setNewHazard({ ...newHazard, location: e.target.value })} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500" placeholder="e.g., Bay 2, Wellsite A-15" required />
               <MapPin className="absolute right-3 top-2.5 h-5 w-5 text-slate-400" />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700">Hazard Type</label>
-            <select
-              value={newHazard.type}
-              onChange={(e) => setNewHazard({ ...newHazard, type: e.target.value })}
-              className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-teal-500"
-            >
-              <option>Unsafe Condition</option>
-              <option>Unsafe Act</option>
-              <option>Equipment Issue</option>
-              <option>Near Miss</option>
-              <option>Environmental</option>
+            <select value={newHazard.type} onChange={(e) => setNewHazard({ ...newHazard, type: e.target.value })} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-teal-500">
+              <option>Unsafe Condition</option> <option>Unsafe Act</option> <option>Equipment Issue</option> <option>Near Miss</option> <option>Environmental</option>
             </select>
           </div>
           <div>
@@ -304,13 +288,7 @@ const HazardManagement = () => {
             <div className="mt-2 flex space-x-4">
               {['Low', 'Medium', 'High', 'Critical'].map((level) => (
                 <label key={level} className="flex items-center">
-                  <input
-                    type="radio"
-                    value={level}
-                    checked={newHazard.severity === level}
-                    onChange={(e) => setNewHazard({ ...newHazard, severity: e.target.value })}
-                    className="h-4 w-4 text-teal-600 border-slate-300 focus:ring-teal-500"
-                  />
+                  <input type="radio" value={level} checked={newHazard.severity === level} onChange={(e) => setNewHazard({ ...newHazard, severity: e.target.value })} className="h-4 w-4 text-teal-600 border-slate-300 focus:ring-teal-500" />
                   <span className="ml-2 text-sm text-slate-700">{level}</span>
                 </label>
               ))}
@@ -318,35 +296,46 @@ const HazardManagement = () => {
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700">Description</label>
-            <textarea
-              value={newHazard.description}
-              onChange={(e) => setNewHazard({ ...newHazard, description: e.target.value })}
-              rows={4}
-              className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-teal-500"
-              placeholder="Describe the hazard or safety issue in detail..."
-              required
-            />
+            <textarea value={newHazard.description} onChange={(e) => setNewHazard({ ...newHazard, description: e.target.value })} rows={4} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-teal-500" placeholder="Describe the hazard or safety issue in detail..." required />
           </div>
           <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center cursor-pointer hover:border-teal-500">
             <Camera className="mx-auto h-10 w-10 text-slate-400" />
             <p className="mt-2 text-sm text-slate-600">Click to add photos</p>
           </div>
           <div className="flex space-x-4">
-            <button
-              type="submit"
-              className="flex-1 bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-semibold transition-colors"
-            >
-              Submit Report
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowReportForm(false)}
-              className="flex-1 bg-slate-200 text-slate-800 px-4 py-2 rounded-lg hover:bg-slate-300 font-semibold transition-colors"
-            >
-              Cancel
-            </button>
+            <button type="submit" className="flex-1 bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-semibold transition-colors">Submit Report</button>
+            <button type="button" onClick={() => setView('list')} className="flex-1 bg-slate-200 text-slate-800 px-4 py-2 rounded-lg hover:bg-slate-300 font-semibold transition-colors">Cancel</button>
           </div>
         </form>
+      </div>
+    );
+  }
+
+  if (view === 'details' && selectedHazard) {
+    return (
+      <div className="max-w-4xl mx-auto bg-white p-8 rounded-xl shadow-lg">
+        <button onClick={() => setView('list')} className="flex items-center gap-2 text-sm text-teal-600 font-semibold mb-6 hover:text-teal-800">
+          <ArrowLeft className="h-4 w-4" /> Back to List
+        </button>
+        <div className="flex justify-between items-start">
+            <div>
+                <h3 className="text-2xl font-bold text-slate-800">{selectedHazard.description}</h3>
+                <div className="text-sm text-slate-500 flex items-center gap-4 mt-2">
+                  <span>📍 {selectedHazard.location}</span>
+                  <span>👤 {selectedHazard.reportedBy}</span>
+                  <span>📅 {selectedHazard.date}</span>
+                </div>
+            </div>
+            <div className="flex items-center gap-3">
+                <span className={`px-3 py-1 text-sm font-semibold rounded-full ${statusColor(selectedHazard.severity)}`}>{selectedHazard.severity}</span>
+                <span className={`px-3 py-1 text-sm font-semibold rounded-full ${statusColor(selectedHazard.status)}`}>{selectedHazard.status}</span>
+            </div>
+        </div>
+        <div className="mt-6 border-t border-slate-200 pt-6">
+            <h4 className="text-lg font-bold text-slate-700">Details</h4>
+            <p className="mt-2 text-slate-600">{selectedHazard.description}</p>
+            {/* Add more details, photos, comments section etc. here */}
+        </div>
       </div>
     );
   }
@@ -355,12 +344,8 @@ const HazardManagement = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-3xl font-bold text-slate-800">Hazard Management</h2>
-        <button
-          onClick={() => setShowReportForm(true)}
-          className="inline-flex items-center justify-center px-5 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors duration-300"
-        >
-          <AlertTriangle className="mr-2 h-5 w-5" />
-          Report Hazard
+        <button onClick={() => setView('form')} className="inline-flex items-center justify-center px-5 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors duration-300">
+          <AlertTriangle className="mr-2 h-5 w-5" /> Report Hazard
         </button>
       </div>
       <div className="bg-white shadow-lg rounded-xl overflow-hidden">
@@ -375,7 +360,7 @@ const HazardManagement = () => {
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusColor(hazard.severity)}`}>{hazard.severity}</span>
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusColor(hazard.status)}`}>{hazard.status}</span>
                   </div>
-                  <button className="text-teal-600 hover:text-teal-800 text-sm font-medium flex items-center gap-1">
+                  <button onClick={() => handleViewDetails(hazard)} className="text-teal-600 hover:text-teal-800 text-sm font-medium flex items-center gap-1">
                     <Eye className="h-4 w-4" /> View
                   </button>
                 </div>
@@ -393,7 +378,6 @@ const HazardManagement = () => {
     </div>
   );
 };
-
 
 const InspectionManagement = () => <div className="text-2xl font-bold text-slate-800">Inspection Management Page</div>;
 const TrainingManagement = () => <div className="text-2xl font-bold text-slate-800">Training Management Page</div>;
@@ -425,40 +409,16 @@ const LoginScreen = () => {
       <div className="max-w-md w-full bg-white p-8 rounded-2xl shadow-lg space-y-6">
         <div className="text-center">
           <Shield className="h-12 w-12 text-teal-600 mx-auto" />
-          <h2 className="mt-4 text-center text-3xl font-extrabold text-slate-900">
-            Frontier Sentinel
-          </h2>
-          <p className="mt-2 text-center text-sm text-slate-600">
-            Safety Management Platform
-          </p>
+          <h2 className="mt-4 text-center text-3xl font-extrabold text-slate-900">Frontier Sentinel</h2>
+          <p className="mt-2 text-center text-sm text-slate-600">Safety Management Platform</p>
         </div>
         <form className="space-y-6" onSubmit={handleLogin}>
           <div className="space-y-4">
-            <input
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-              placeholder="Email address"
-            />
-            <input
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-              placeholder="Password"
-            />
+            <input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500" placeholder="Email address" />
+            <input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500" placeholder="Password" />
           </div>
           {error && <p className="text-sm text-center text-red-600">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:bg-teal-400 transition-colors duration-300"
-          >
+          <button type="submit" disabled={loading} className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:bg-teal-400 transition-colors duration-300">
             {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Sign in'}
           </button>
         </form>
