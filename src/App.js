@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, Link } from 'react-router-dom';
 import { initializeApp } from "firebase/app";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
-import { getFirestore, collection, getDocs, doc, getDoc } from "firebase/firestore";
+import { getFirestore, collection, getDocs, doc, getDoc, addDoc, serverTimestamp } from "firebase/firestore";
 import {
   User,
   Shield,
@@ -17,7 +17,10 @@ import {
   Clock,
   TrendingUp,
   Activity,
-  Loader2
+  Loader2,
+  MapPin,
+  Camera,
+  Eye
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
@@ -81,7 +84,7 @@ const statusColor = (status) => {
   switch (status) {
     case 'High': case 'Critical': case 'Overdue': case 'Expired':
       return 'bg-red-100 text-red-800';
-    case 'Medium': case 'Investigating': case 'Expiring Soon':
+    case 'Medium': case 'Investigating':
       return 'bg-yellow-100 text-yellow-800';
     case 'Low': case 'Current':
       return 'bg-green-100 text-green-800';
@@ -139,7 +142,7 @@ const Dashboard = () => {
           <h2 className="text-3xl font-bold text-slate-800">Safety Dashboard</h2>
           <p className="text-slate-500 mt-1">An overview of your company's safety performance.</p>
         </div>
-        <Link to="/hazards/new" className="inline-flex items-center justify-center px-5 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors duration-300">
+        <Link to="/hazards" className="inline-flex items-center justify-center px-5 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors duration-300">
           <Plus className="mr-2 h-5 w-5" />
           Quick Report
         </Link>
@@ -215,7 +218,183 @@ const ActivityCard = ({ title, data, renderItem }) => (
   </div>
 );
 
-const HazardManagement = () => <div className="text-2xl font-bold text-slate-800">Hazard Management Page</div>;
+// --- NEW FUNCTIONAL HAZARD MANAGEMENT COMPONENT ---
+const HazardManagement = () => {
+  const { userData } = useAuth();
+  const [hazards, setHazards] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showReportForm, setShowReportForm] = useState(false);
+  const [newHazard, setNewHazard] = useState({
+    location: '',
+    type: 'Unsafe Condition',
+    severity: 'Medium',
+    description: '',
+    status: 'Open',
+  });
+
+  const fetchHazards = async () => {
+    setLoading(true);
+    const hazardSnapshot = await getDocs(collection(db, 'hazardIds'));
+    setHazards(hazardSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchHazards();
+  }, []);
+
+  const handleSubmitHazard = async (e) => {
+    e.preventDefault();
+    if (!newHazard.description || !newHazard.location) {
+      alert("Please fill out all required fields.");
+      return;
+    }
+    
+    try {
+      await addDoc(collection(db, "hazardIds"), {
+        ...newHazard,
+        reportedBy: userData?.displayName || 'Unknown User',
+        date: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
+        timestamp: serverTimestamp()
+      });
+      setShowReportForm(false);
+      setNewHazard({ location: '', type: 'Unsafe Condition', severity: 'Medium', description: '', status: 'Open' });
+      fetchHazards(); // Refresh the list after adding
+    } catch (error) {
+      console.error("Error adding document: ", error);
+      alert("Failed to submit hazard report.");
+    }
+  };
+
+  if (showReportForm) {
+    return (
+      <div className="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-lg">
+        <h3 className="text-2xl font-bold text-slate-800 mb-6">Report New Hazard</h3>
+        <form onSubmit={handleSubmitHazard} className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Location</label>
+            <div className="mt-1 relative">
+              <input
+                type="text"
+                value={newHazard.location}
+                onChange={(e) => setNewHazard({ ...newHazard, location: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                placeholder="e.g., Bay 2, Wellsite A-15"
+                required
+              />
+              <MapPin className="absolute right-3 top-2.5 h-5 w-5 text-slate-400" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Hazard Type</label>
+            <select
+              value={newHazard.type}
+              onChange={(e) => setNewHazard({ ...newHazard, type: e.target.value })}
+              className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-teal-500"
+            >
+              <option>Unsafe Condition</option>
+              <option>Unsafe Act</option>
+              <option>Equipment Issue</option>
+              <option>Near Miss</option>
+              <option>Environmental</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Severity Level</label>
+            <div className="mt-2 flex space-x-4">
+              {['Low', 'Medium', 'High', 'Critical'].map((level) => (
+                <label key={level} className="flex items-center">
+                  <input
+                    type="radio"
+                    value={level}
+                    checked={newHazard.severity === level}
+                    onChange={(e) => setNewHazard({ ...newHazard, severity: e.target.value })}
+                    className="h-4 w-4 text-teal-600 border-slate-300 focus:ring-teal-500"
+                  />
+                  <span className="ml-2 text-sm text-slate-700">{level}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Description</label>
+            <textarea
+              value={newHazard.description}
+              onChange={(e) => setNewHazard({ ...newHazard, description: e.target.value })}
+              rows={4}
+              className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-teal-500"
+              placeholder="Describe the hazard or safety issue in detail..."
+              required
+            />
+          </div>
+          <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center cursor-pointer hover:border-teal-500">
+            <Camera className="mx-auto h-10 w-10 text-slate-400" />
+            <p className="mt-2 text-sm text-slate-600">Click to add photos</p>
+          </div>
+          <div className="flex space-x-4">
+            <button
+              type="submit"
+              className="flex-1 bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-semibold transition-colors"
+            >
+              Submit Report
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowReportForm(false)}
+              className="flex-1 bg-slate-200 text-slate-800 px-4 py-2 rounded-lg hover:bg-slate-300 font-semibold transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-3xl font-bold text-slate-800">Hazard Management</h2>
+        <button
+          onClick={() => setShowReportForm(true)}
+          className="inline-flex items-center justify-center px-5 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors duration-300"
+        >
+          <AlertTriangle className="mr-2 h-5 w-5" />
+          Report Hazard
+        </button>
+      </div>
+      <div className="bg-white shadow-lg rounded-xl overflow-hidden">
+        {loading ? (
+          <div className="p-6 text-center">Loading hazards...</div>
+        ) : (
+          <div className="divide-y divide-slate-200">
+            {hazards.map((hazard) => (
+              <div key={hazard.id} className="p-4 hover:bg-slate-50">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusColor(hazard.severity)}`}>{hazard.severity}</span>
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusColor(hazard.status)}`}>{hazard.status}</span>
+                  </div>
+                  <button className="text-teal-600 hover:text-teal-800 text-sm font-medium flex items-center gap-1">
+                    <Eye className="h-4 w-4" /> View
+                  </button>
+                </div>
+                <h4 className="font-semibold text-slate-800 mb-2">{hazard.description}</h4>
+                <div className="text-sm text-slate-500 flex items-center gap-4">
+                  <span>📍 {hazard.location}</span>
+                  <span>👤 {hazard.reportedBy}</span>
+                  <span>📅 {hazard.date}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
 const InspectionManagement = () => <div className="text-2xl font-bold text-slate-800">Inspection Management Page</div>;
 const TrainingManagement = () => <div className="text-2xl font-bold text-slate-800">Training Management Page</div>;
 const PolicyManagement = () => <div className="text-2xl font-bold text-slate-800">Policy Management Page</div>;
