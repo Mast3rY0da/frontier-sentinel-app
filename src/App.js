@@ -23,8 +23,7 @@ import {
   Eye,
   ArrowLeft,
   Download,
-  CheckCircle,
-  XCircle
+  CheckCircle
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
@@ -410,7 +409,7 @@ const PolicyManagement = () => {
         setLoading(false);
       };
       fetchPolicyData();
-    }, []);
+    }, [user]); // Re-fetch if user changes
   
     const handleAcknowledge = async () => {
       if (!user) return;
@@ -466,7 +465,7 @@ const PolicyManagement = () => {
                 {acknowledgments.map(ack => (
                     <li key={ack.userId} className="py-2 flex justify-between items-center">
                         <span className="text-slate-700">{ack.email}</span>
-                        <span className="text-sm text-slate-500">{new Date(ack.acknowledgedAt?.toDate()).toLocaleString()}</span>
+                        <span className="text-sm text-slate-500">{ack.acknowledgedAt ? new Date(ack.acknowledgedAt.toDate()).toLocaleString() : 'Date not available'}</span>
                     </li>
                 ))}
             </ul>
