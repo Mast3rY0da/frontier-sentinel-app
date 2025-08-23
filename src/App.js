@@ -297,7 +297,7 @@ const HazardManagement = () => {
                     { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
                 ]
             };
-            const apiKey = "";
+            const apiKey = process.env.REACT_APP_GEMINI_API_KEY;
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
             
             const response = await fetch(apiUrl, {
